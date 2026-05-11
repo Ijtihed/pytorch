@@ -217,6 +217,76 @@ class TestTritonHeuristics(TestCase):
             [(1, 2**20), (64, 1)],
         )
 
+    def test_filter_configs_for_device_heuristics_cooperative_reduction(self):
+        triton_meta = {
+            "device": DeviceProperties(
+                type="cuda", index=0, multi_processor_count=80, cc=80
+            )
+        }
+        size_hints = {"x": 2**14, "r0_": 2**20}
+        inductor_meta = {
+            "filter_configs_by_device": True,
+            "grid_type": "CooperativeReductionGrid",
+        }
+        configs = [
+            # Bad: RSPLIT=256 splits reduction across too many CTAs with tiny per-CTA work.
+            triton.Config(
+                {"XBLOCK": 1, "R0_BLOCK": 4, "RSPLIT": 256},
+                num_warps=1,
+                num_stages=1,
+            ),
+            # Good: moderate RSPLIT keeps enough work per CTA.
+            triton.Config(
+                {"XBLOCK": 64, "R0_BLOCK": 1024, "RSPLIT": 4},
+                num_warps=4,
+                num_stages=1,
+            ),
+        ]
+
+        filtered = filter_configs_for_device_heuristics(
+            size_hints=size_hints,
+            inductor_meta=inductor_meta,
+            triton_meta=triton_meta,
+            configs=configs,
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].kwargs["XBLOCK"], 64)
+
+    def test_filter_configs_for_device_heuristics_split_scan(self):
+        triton_meta = {
+            "device": DeviceProperties(
+                type="cuda", index=0, multi_processor_count=80, cc=80
+            )
+        }
+        size_hints = {"x": 2**14, "r0_": 2**20}
+        inductor_meta = {
+            "filter_configs_by_device": True,
+            "grid_type": "SplitScanGrid",
+        }
+        configs = [
+            # Bad: tiny R0_BLOCK produces a massive grid with almost no work per CTA.
+            triton.Config(
+                {"XBLOCK": 1, "R0_BLOCK": 1},
+                num_warps=1,
+                num_stages=1,
+            ),
+            # Good: large R0_BLOCK gives each CTA enough work.
+            triton.Config(
+                {"XBLOCK": 1, "R0_BLOCK": 1024},
+                num_warps=4,
+                num_stages=1,
+            ),
+        ]
+
+        filtered = filter_configs_for_device_heuristics(
+            size_hints=size_hints,
+            inductor_meta=inductor_meta,
+            triton_meta=triton_meta,
+            configs=configs,
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].kwargs["R0_BLOCK"], 1024)
+
     def test_filter_configs_for_device_heuristics_keeps_smallest_grid(self):
         triton_meta = {
             "device": DeviceProperties(

@@ -4251,74 +4251,74 @@ def filter_configs_for_device_heuristics(
 
     size_hint_meta = _size_hint_meta()
 
-    def _config_stats(cfg: Config) -> tuple[int, int]:
-        def _block(name: str, default: int = 1) -> int:
-            value = cfg.kwargs.get(name, default)
-            return value if isinstance(value, int) and value > 0 else default
+    def _block(cfg: Config, name: str, default: int = 1) -> int:
+        value = cfg.kwargs.get(name, default)
+        return value if isinstance(value, int) and value > 0 else default
 
-        def _block_product(keys: list[str]) -> int:
-            product = 1
-            for key in keys:
-                product *= _block(key)
-            return product
+    def _block_product(cfg: Config, keys: list[str]) -> int:
+        product = 1
+        for key in keys:
+            product *= _block(cfg, key)
+        return product
 
-        def estimate_grid_ctas() -> int:
-            grid_ctas = 1
-            if inductor_meta.get("grid_type"):
-                try:
-                    grid = GridExpr.from_meta(inductor_meta, cfg)
-                    x_grid, y_grid, z_grid = grid.eval_slow(size_hint_meta)
-                    grid_ctas = (
-                        max(1, int(x_grid)) * max(1, int(y_grid)) * max(1, int(z_grid))
-                    )
-                except Exception:
-                    # Fall back to a generic estimate when grid metadata is incomplete.
-                    grid_ctas = 1
-
-            if grid_ctas == 1:
-                for prefix, numel in size_hints.items():
-                    if prefix_is_reduction(prefix):
-                        continue
-                    block = cfg.kwargs.get(prefix.upper() + "BLOCK", 1)
-                    if not isinstance(block, int) or block <= 0:
-                        block = 1
-                    grid_ctas *= ceildiv(numel, block)
-
-            return grid_ctas
-
-        def estimate_cta_work(grid_ctas: int) -> int:
-            reduction_prefixes = [
-                prefix for prefix in size_hints if prefix_is_reduction(prefix)
-            ]
-            reduction_block_keys = [
-                f"{prefix.upper()}BLOCK" for prefix in reduction_prefixes
-            ]
-            pointwise_work = _block_product(["XBLOCK", "YBLOCK", "ZBLOCK"])
-            reduction_work = _block_product(reduction_block_keys)
-
-            cta_work = pointwise_work * (reduction_work if reduction_prefixes else 1)
-            grid_type = inductor_meta.get("grid_type")
-            if grid_type == MixOrderReductionGrid.__name__:
-                cta_work = max(cta_work, _block("XBLOCK") * _block("RSPLIT_SIZE"))
-            elif grid_type == CooperativeReductionGrid.__name__ and reduction_prefixes:
-                # Cooperative reduction partitions the reduction dimension across RSPLIT CTAs.
-                cta_work = max(1, cta_work // _block("RSPLIT"))
-            elif grid_type == SplitScanGrid.__name__:
-                cta_work = max(cta_work, _block("R0_BLOCK"))
-
-            if cta_work <= 1 and grid_ctas > 0:
-                # Last-resort estimate when block metadata is sparse.
-                non_reduction_numel = math.prod(
-                    numel
-                    for prefix, numel in size_hints.items()
-                    if not prefix_is_reduction(prefix)
+    def _estimate_grid_ctas(cfg: Config) -> int:
+        grid_ctas = 1
+        if inductor_meta.get("grid_type"):
+            try:
+                grid = GridExpr.from_meta(inductor_meta, cfg)
+                x_grid, y_grid, z_grid = grid.eval_slow(size_hint_meta)
+                grid_ctas = (
+                    max(1, int(x_grid)) * max(1, int(y_grid)) * max(1, int(z_grid))
                 )
-                cta_work = max(1, ceildiv(non_reduction_numel, grid_ctas))
+            except Exception:
+                # Fall back to a generic estimate when grid metadata is incomplete.
+                grid_ctas = 1
 
-            return cta_work
+        if grid_ctas == 1:
+            for prefix, numel in size_hints.items():
+                if prefix_is_reduction(prefix):
+                    continue
+                block = cfg.kwargs.get(prefix.upper() + "BLOCK", 1)
+                if not isinstance(block, int) or block <= 0:
+                    block = 1
+                grid_ctas *= ceildiv(numel, block)
 
-        grid_ctas = estimate_grid_ctas()
-        return grid_ctas, estimate_cta_work(grid_ctas)
+        return grid_ctas
+
+    def _estimate_cta_work(cfg: Config, grid_ctas: int) -> int:
+        reduction_prefixes = [
+            prefix for prefix in size_hints if prefix_is_reduction(prefix)
+        ]
+        reduction_block_keys = [
+            f"{prefix.upper()}BLOCK" for prefix in reduction_prefixes
+        ]
+        pointwise_work = _block_product(cfg, ["XBLOCK", "YBLOCK", "ZBLOCK"])
+        reduction_work = _block_product(cfg, reduction_block_keys)
+
+        cta_work = pointwise_work * (reduction_work if reduction_prefixes else 1)
+        grid_type = inductor_meta.get("grid_type")
+        if grid_type == MixOrderReductionGrid.__name__:
+            cta_work = max(cta_work, _block(cfg, "XBLOCK") * _block(cfg, "RSPLIT_SIZE"))
+        elif grid_type == CooperativeReductionGrid.__name__ and reduction_prefixes:
+            # Cooperative reduction partitions the reduction dimension across RSPLIT CTAs.
+            cta_work = max(1, cta_work // _block(cfg, "RSPLIT"))
+        elif grid_type == SplitScanGrid.__name__:
+            cta_work = max(cta_work, _block(cfg, "R0_BLOCK"))
+
+        if cta_work <= 1 and grid_ctas > 0:
+            # Last-resort estimate when block metadata is sparse.
+            non_reduction_numel = math.prod(
+                numel
+                for prefix, numel in size_hints.items()
+                if not prefix_is_reduction(prefix)
+            )
+            cta_work = max(1, ceildiv(non_reduction_numel, grid_ctas))
+
+        return cta_work
+
+    def _config_stats(cfg: Config) -> tuple[int, int]:
+        grid_ctas = _estimate_grid_ctas(cfg)
+        return grid_ctas, _estimate_cta_work(cfg, grid_ctas)
 
     def _is_extremely_bad(grid_ctas: int, cta_work: int) -> bool:
         return (cta_work <= 32 and grid_ctas >= cta_count * 1024) or (
