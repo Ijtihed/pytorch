@@ -314,6 +314,7 @@ class TestTritonHeuristics(TestCase):
 
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].kwargs["XBLOCK"], 32)
+
     def test_reduction_min_block_preserves_tile_product(self):
         cfg = _enforce_reduction_config_block_minimums(
             [triton.Config({"XBLOCK": 64, "R0_BLOCK": 1024})],
