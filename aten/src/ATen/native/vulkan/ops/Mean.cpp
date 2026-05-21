@@ -2,6 +2,8 @@
 #include <ATen/native/vulkan/ops/Utils.h>
 #include <torch/library.h>
 
+#include <unordered_set>
+
 namespace at {
 namespace native {
 namespace vulkan {
@@ -106,7 +108,7 @@ Tensor mean_dim_IntList(
   TORCH_CHECK(
       opt_dim.has_value(), "Vulkan mean without a dim arg is not implemented");
 
-  std::set<int64_t> dims_set;
+  std::unordered_set<int64_t> dims_set;
 
   if (opt_dim.has_value()) {
     auto dims = opt_dim.value();
@@ -120,7 +122,7 @@ Tensor mean_dim_IntList(
           "], but got ",
           d);
       int64_t dim_normalized = utils::normalize(d, self.dim());
-      if (dims_set.find(dim_normalized) != dims_set.end()) {
+      if (dims_set.contains(dim_normalized)) {
         TORCH_CHECK(
             false,
             "dim ",

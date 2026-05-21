@@ -2,6 +2,8 @@
 #include <ATen/native/vulkan/ops/Utils.h>
 #include <torch/library.h>
 
+#include <unordered_set>
+
 namespace at {
 namespace native {
 namespace vulkan {
@@ -96,7 +98,7 @@ Tensor sum_dim_IntList(
       opt_dim.has_value(),
       "Vulkan sum.dim_IntList without a dim arg is not implemented");
 
-  std::set<int64_t> dims_set;
+  std::unordered_set<int64_t> dims_set;
   if (opt_dim.has_value()) {
     auto dims = opt_dim.value();
     for (const auto& dim : dims) {
@@ -112,7 +114,7 @@ Tensor sum_dim_IntList(
           dim);
       // Normalize dim into range [0, self.dim() - 1]
       int64_t dim_normalized = utils::normalize(dim, self.dim());
-      if (dims_set.find(dim_normalized) != dims_set.end()) {
+      if (dims_set.contains(dim_normalized)) {
         TORCH_CHECK(
             false,
             "dim ",
