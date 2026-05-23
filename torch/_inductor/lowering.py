@@ -6962,12 +6962,13 @@ def var_mean_helper_(x, *, axis, correction, keepdim, return_mean):
         keepdim=keepdim,
         return_mean=return_mean,
     )
+    # Preserve eager var_mean's Welford-style mean when it is an output.
+    use_two_step = not return_mean and use_two_step_variance(
+        x, axis=axis, keepdim=keepdim
+    )
     output = (
         var_mean_sum_(**kwargs)
-        if (
-            config.mtia.disable_welford_reduction
-            or use_two_step_variance(x, axis=axis, keepdim=keepdim)
-        )
+        if (config.mtia.disable_welford_reduction or use_two_step)
         else var_mean_welford_(**kwargs)
     )
     output = tuple(to_dtype(x, out_dtype, copy=False) for x in output)
@@ -7720,13 +7721,18 @@ sub = register_pointwise(aten.sub, allow_alpha=True)
 @register_lowering(aten.addcmul, broadcast=True)
 def addcmul(self, tensor1, tensor2, *, value=1):
     """
-    Computes self + value * tensor1 * tensor2 using FMA for better precision.
+    Computes self + value * tensor1 * tensor2 while matching eager contraction.
 
     Matches eager CUDA kernel order: self + value * (tensor1 * tensor2)
     This is computed as: fma(value, tensor1 * tensor2, self)
 
-    Note: FMA is only used for floating-point types on non-AMD GPUs. For integer types,
-    we fall back to regular arithmetic since FMA doesn't support integers.
+    For value=1, native addcmul produces FMA-contracted numerics. Preserve
+    that API behavior directly so decompositions can use addcmul to request
+    the same numerics instead of relying on a backend pattern match.
+
+    Outside the CPU value=1 case, FMA is only used for floating-point types on
+    non-AMD GPUs/XPU. For integer types, we fall back to regular arithmetic
+    since FMA doesn't support integers.
 
     For floating-point types, we use mul_rn (round-to-nearest multiplication)
     to force rounding of the product before the FMA. This prevents Triton's
@@ -7744,12 +7750,18 @@ def addcmul(self, tensor1, tensor2, *, value=1):
     t1_loader = tensor1.make_loader()
     t2_loader = tensor2.make_loader()
 
-    # FMA/mul_rn/div_rn are only available for floating-point types on CUDA (non-AMD)
+    # mul_rn/div_rn are only available for floating-point types on CUDA/XPU.
+    # CPU addcmul(value=1) uses FMA to match native addcmul semantics.
     device = self.get_device()
     use_fma = (
         dtype.is_floating_point
         and device is not None
         and device.type in ["cuda", "xpu"]
+    )
+    use_fma_for_value_one = use_fma or (
+        dtype in [torch.float32, torch.float64]
+        and device is not None
+        and device.type == "cpu"
     )
 
     def inner_fn(idx):
@@ -7757,7 +7769,7 @@ def addcmul(self, tensor1, tensor2, *, value=1):
         t1_val = t1_loader(idx)
         t2_val = t2_loader(idx)
 
-        if value == 1 and use_fma:
+        if value == 1 and use_fma_for_value_one:
             return ops.fma(t1_val, t2_val, self_val)
 
         # Match eager order: self + value * (tensor1 * tensor2)

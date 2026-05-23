@@ -4883,6 +4883,49 @@ class CPUReproTests(TestCase):
                         "__at_align__ std::array", 0, exactly=True
                     ).run(code)
 
+    @config.patch(force_disable_caches=True)
+    def test_addcmul_value_one_fma_precision(self):
+        def fn(self_tensor, tensor1, tensor2):
+            return torch.addcmul(self_tensor, tensor1, tensor2, value=1)
+
+        compiled_fn = torch.compile(fn, backend="inductor", fullgraph=True)
+        for dtype in (torch.float32, torch.float64):
+            with self.subTest(dtype=dtype):
+                torch.manual_seed(0)
+                self_tensor = torch.randn(1024, dtype=dtype)
+                tensor1 = torch.randn(1024, dtype=dtype)
+                tensor2 = torch.randn(1024, dtype=dtype)
+
+                expected = fn(self_tensor, tensor1, tensor2)
+                actual = compiled_fn(self_tensor, tensor1, tensor2)
+                self.assertEqual(actual, expected, atol=0, rtol=0)
+
+    @config.patch(force_disable_caches=True)
+    def test_group_norm_affine_decomp_precision(self):
+        torch.manual_seed(0)
+        bn = nn.BatchNorm1d(10).eval()
+        elu = nn.ELU()
+        gn = nn.GroupNorm(10, 10).eval()
+
+        def model():
+            x = torch.ones([6, 10, 12])
+            t = bn(x)
+            t = elu(t)
+            t = gn(t)
+            return torch.log(torch.clamp(t, min=1e-6))
+
+        def bias_only_model(bias):
+            x = torch.ones([6, 10, 12])
+            t = bn(x)
+            t = elu(t)
+            t = F.group_norm(t, 10, weight=None, bias=bias)
+            return torch.log(torch.clamp(t, min=1e-6))
+
+        for fn, args in ((model, ()), (bias_only_model, (torch.zeros(10),))):
+            expected = fn(*args)
+            actual = torch.compile(fn, backend="inductor", fullgraph=True)(*args)
+            torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+
     @requires_vectorization
     @unittest.skipIf(not torch.backends.mkldnn.is_available(), "MKLDNN is not enabled")
     def test_group_norm_sum_conv1d_tail_reduction_store(self):
