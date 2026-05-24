@@ -23,6 +23,7 @@ accurate graph capture while handling Python's various function-related behavior
 
 import _collections  # type: ignore[import-not-found]
 import builtins
+import copy
 import functools
 import importlib.metadata
 import importlib.util
@@ -86,6 +87,7 @@ from ..utils import (
     is_wrapper_or_member_descriptor,
     istype,
     make_cell,
+    proxy_args_kwargs,
 )
 from .base import (
     AsPythonConstantNotImplementedError,
@@ -1014,6 +1016,45 @@ class UserFunctionVariable(BaseUserFunctionVariable):
 
     def is_python_equal(self, other: object) -> bool:
         return isinstance(other, variables.UserFunctionVariable) and self.fn is other.fn
+
+
+class CopyFunctionVariable(UserFunctionVariable):
+    def call_function(
+        self,
+        tx: "InstructionTranslator",
+        args: list[VariableTracker],
+        kwargs: dict[str, VariableTracker],
+    ) -> VariableTracker:
+        copy_arg = None
+        if len(args) == 1 and not kwargs:
+            copy_arg = args[0]
+        elif not args and set(kwargs.keys()) == {"x"}:
+            copy_arg = kwargs["x"]
+
+        if copy_arg is not None and copy_arg.is_tensor():
+            if not tx.export:
+                unimplemented(
+                    gb_type="copy.copy() on Tensor",
+                    context=f"copy.copy({copy_arg})",
+                    explanation="Dynamo does not support copy.copy() on tensors "
+                    "outside export because preserving shallow-copy tensor "
+                    "identity across compiled backends is not currently supported.",
+                    hints=[
+                        "Avoid calling copy.copy() on tensors inside compiled regions.",
+                        *graph_break_hints.SUPPORTABLE,
+                    ],
+                )
+
+            from .builder import wrap_fx_proxy
+
+            proxy = tx.output.create_proxy(
+                "call_function",
+                copy.copy,
+                *proxy_args_kwargs([copy_arg], {}),
+            )
+            return wrap_fx_proxy(tx, proxy)
+
+        return super().call_function(tx, args, kwargs)
 
 
 class InspectSignatureVariable(UserFunctionVariable):

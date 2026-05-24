@@ -2860,6 +2860,17 @@
       ]
     }
   ],
+  "GB3979": [
+    {
+      "Gb_type": "copy.copy() on Tensor",
+      "Context": "copy.copy({copy_arg})",
+      "Explanation": "Dynamo does not support copy.copy() on tensors outside export because preserving shallow-copy tensor identity across compiled backends is not currently supported.",
+      "Hints": [
+        "Avoid calling copy.copy() on tensors inside compiled regions.",
+        "It may be possible to write Dynamo tracing rules for this code. Please report an issue to PyTorch if you encounter this graph break often and it is causing performance issues."
+      ]
+    }
+  ],
   "GB0208": [
     {
       "Gb_type": "torch.* op returned non-Tensor",
