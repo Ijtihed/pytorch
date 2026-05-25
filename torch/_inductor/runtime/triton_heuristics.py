@@ -3882,7 +3882,7 @@ def pointwise(
         raise NotImplementedError(f"size_hints: {size_hints}")
 
     configs = _maybe_filter_configs_for_tma_restrictions(inductor_meta, configs)
-    configs = filter_configs_for_device_heuristics(
+    configs = filter_configs_by_launch_geometry(
         size_hints=size_hints,
         inductor_meta=inductor_meta,
         triton_meta=triton_meta,
@@ -4383,7 +4383,7 @@ def filter_reduction_configs_for_determinism(
     return configs
 
 
-def filter_configs_for_device_heuristics(
+def filter_configs_by_launch_geometry(
     *,
     size_hints: dict[str, int],
     inductor_meta: dict[str, Any],
@@ -4394,13 +4394,16 @@ def filter_configs_for_device_heuristics(
     Filter extremely poor launch configurations based on launch geometry and
     device parallelism, while preserving at least one candidate.
     """
-    if not inductor_meta.get("filter_configs_by_device", False):
+    device = triton_meta["device"]
+    if (
+        not inductor_meta.get("filter_configs_by_launch_geometry", False)
+        or device.type != "xpu"
+    ):
         return configs
     if len(configs) <= 1:
         return configs
 
-    device = triton_meta.get("device")
-    cta_count = getattr(device, "multi_processor_count", 0) if device else 0
+    cta_count = getattr(device, "multi_processor_count", 0)
     if not isinstance(cta_count, int) or cta_count <= 0:
         return configs
 
@@ -4549,7 +4552,7 @@ def reduction(
     )
 
     configs = _maybe_filter_configs_for_tma_restrictions(inductor_meta, configs)
-    configs = filter_configs_for_device_heuristics(
+    configs = filter_configs_by_launch_geometry(
         size_hints=size_hints,
         inductor_meta=inductor_meta,
         triton_meta=triton_meta,
@@ -4613,7 +4616,7 @@ def cooperative_reduction(
     # TODO(jansel): add more configs in max_autotune
 
     configs = _maybe_filter_configs_for_tma_restrictions(inductor_meta, configs)
-    configs = filter_configs_for_device_heuristics(
+    configs = filter_configs_by_launch_geometry(
         size_hints=size_hints,
         inductor_meta=inductor_meta,
         triton_meta=triton_meta,
@@ -4819,7 +4822,7 @@ def persistent_reduction(
     inductor_meta[persistent_reduction_key] = True
     configs = _maybe_filter_configs_for_tma_restrictions(inductor_meta, configs)
     inductor_meta.pop(persistent_reduction_key)
-    configs = filter_configs_for_device_heuristics(
+    configs = filter_configs_by_launch_geometry(
         size_hints=size_hints,
         inductor_meta=inductor_meta,
         triton_meta=triton_meta,
@@ -4932,7 +4935,7 @@ def split_scan(
                 cfg.kwargs[var] = min_rblock
 
     configs = _maybe_filter_configs_for_tma_restrictions(inductor_meta, configs)
-    configs = filter_configs_for_device_heuristics(
+    configs = filter_configs_by_launch_geometry(
         size_hints=size_hints,
         inductor_meta=inductor_meta,
         triton_meta=triton_meta,

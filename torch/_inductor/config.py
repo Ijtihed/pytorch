@@ -1893,8 +1893,9 @@ class triton:
     # Filter out obviously poor autotune configs based on launch geometry
     # vs device SM count. This is independent of deterministic mode and
     # intended to reduce futile benchmarking.
-    filter_configs_by_device = (
-        os.environ.get("TORCHINDUCTOR_TRITON_FILTER_CONFIGS_BY_DEVICE", "0") == "1"
+    filter_configs_by_launch_geometry = (
+        os.environ.get("TORCHINDUCTOR_TRITON_FILTER_CONFIGS_BY_LAUNCH_GEOMETRY", "0")
+        == "1"
     )
 
     # max autotune gemm with cublasLt

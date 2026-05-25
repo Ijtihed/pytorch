@@ -60,7 +60,7 @@ from torch._inductor.runtime.triton_heuristics import (
     CachingAutotuner,
     CachingAutotunerPlugin,
     DEFER,
-    filter_configs_for_device_heuristics,
+    filter_configs_by_launch_geometry,
     make_matmul_triton_config,
     template,
     triton_config,
@@ -107,10 +107,10 @@ class TestTritonHeuristics(TestCase):
                 continue
             self.assertTrue(cfg.kwargs[key] <= TRITON_MAX_BLOCK[label])
 
-    def test_filter_configs_for_device_heuristics_pointwise_1d(self):
+    def test_filter_configs_by_launch_geometry_pointwise_1d(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**28}
@@ -123,7 +123,7 @@ class TestTritonHeuristics(TestCase):
             triton.Config({"XBLOCK": 256}, num_warps=4, num_stages=1),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -132,10 +132,10 @@ class TestTritonHeuristics(TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].kwargs["XBLOCK"], 256)
 
-    def test_filter_configs_for_device_heuristics_pointwise_2d(self):
+    def test_filter_configs_by_launch_geometry_pointwise_2d(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**14, "y": 2**14}
@@ -148,7 +148,7 @@ class TestTritonHeuristics(TestCase):
             triton.Config({"XBLOCK": 256, "YBLOCK": 256}, num_warps=4, num_stages=1),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -158,10 +158,10 @@ class TestTritonHeuristics(TestCase):
         self.assertEqual(filtered[0].kwargs["XBLOCK"], 256)
         self.assertEqual(filtered[0].kwargs["YBLOCK"], 256)
 
-    def test_filter_configs_for_device_heuristics_reduction_1d(self):
+    def test_filter_configs_by_launch_geometry_reduction_1d(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**26, "r0_": 1024}
@@ -174,7 +174,7 @@ class TestTritonHeuristics(TestCase):
             triton.Config({"XBLOCK": 64, "R0_BLOCK": 64}, num_warps=4, num_stages=1),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -183,10 +183,10 @@ class TestTritonHeuristics(TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].kwargs["XBLOCK"], 64)
 
-    def test_filter_configs_for_device_heuristics_mix_order_reduction(self):
+    def test_filter_configs_by_launch_geometry_mix_order_reduction(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**26, "r0_": 1024}
@@ -215,7 +215,7 @@ class TestTritonHeuristics(TestCase):
             ),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -228,10 +228,10 @@ class TestTritonHeuristics(TestCase):
             [(1, 2**20), (64, 1)],
         )
 
-    def test_filter_configs_for_device_heuristics_cooperative_reduction(self):
+    def test_filter_configs_by_launch_geometry_cooperative_reduction(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**14, "r0_": 2**20}
@@ -254,7 +254,7 @@ class TestTritonHeuristics(TestCase):
             ),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -263,10 +263,10 @@ class TestTritonHeuristics(TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].kwargs["XBLOCK"], 64)
 
-    def test_filter_configs_for_device_heuristics_split_scan(self):
+    def test_filter_configs_by_launch_geometry_split_scan(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=80, cc=80
+                type="xpu", index=0, multi_processor_count=80, cc=80
             )
         }
         size_hints = {"x": 2**14, "r0_": 2**20}
@@ -289,7 +289,7 @@ class TestTritonHeuristics(TestCase):
             ),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
@@ -298,10 +298,10 @@ class TestTritonHeuristics(TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].kwargs["R0_BLOCK"], 1024)
 
-    def test_filter_configs_for_device_heuristics_keeps_smallest_grid(self):
+    def test_filter_configs_by_launch_geometry_keeps_smallest_grid(self):
         triton_meta = {
             "device": DeviceProperties(
-                type="cuda", index=0, multi_processor_count=1, cc=80
+                type="xpu", index=0, multi_processor_count=1, cc=80
             )
         }
         size_hints = {"x": 2**22}
@@ -314,7 +314,7 @@ class TestTritonHeuristics(TestCase):
             triton.Config({"XBLOCK": 32}, num_warps=1, num_stages=1),
         ]
 
-        filtered = filter_configs_for_device_heuristics(
+        filtered = filter_configs_by_launch_geometry(
             size_hints=size_hints,
             inductor_meta=inductor_meta,
             triton_meta=triton_meta,
