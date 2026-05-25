@@ -115,7 +115,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**28}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "Grid1D",
         }
         configs = [
@@ -140,7 +140,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**14, "y": 2**14}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "Grid2D",
         }
         configs = [
@@ -166,7 +166,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**26, "r0_": 1024}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "Grid1D",
         }
         configs = [
@@ -191,7 +191,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**26, "r0_": 1024}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "MixOrderReductionGrid",
         }
         configs = [
@@ -236,7 +236,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**14, "r0_": 2**20}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "CooperativeReductionGrid",
         }
         configs = [
@@ -271,7 +271,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**14, "r0_": 2**20}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "SplitScanGrid",
         }
         configs = [
@@ -306,7 +306,7 @@ class TestTritonHeuristics(TestCase):
         }
         size_hints = {"x": 2**22}
         inductor_meta = {
-            "filter_configs_by_device": True,
+            "filter_configs_by_launch_geometry": True,
             "grid_type": "Grid1D",
         }
         configs = [
