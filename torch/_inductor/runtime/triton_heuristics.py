@@ -119,7 +119,7 @@ if TYPE_CHECKING:
     from torch._guards import CompileId
     from torch.utils._debug_mode import _TritonKernelCall
 
-    LauncherType = Any
+LauncherType = Any
 
 _KernelType = (
     CompiledKernel | StaticallyLaunchedCudaKernel | StaticallyLaunchedXpuKernel
@@ -2073,7 +2073,7 @@ class CachingAutotuner(KernelInterface):
                 f"{kernel_name}: too many positional arguments - "
                 f"expected {expected}, got {len(args)}. "
                 "'stream' must be passed as a keyword argument."
-            )
+            ) from None
 
     def _build_fast_launcher(self, launcher: LauncherType) -> LauncherType | None:
         """Try to build a _FastCudaLauncher-backed version of the launcher.
